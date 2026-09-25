@@ -134,3 +134,57 @@ python3 experiments/scripts/eval_hh2.py           # HH2 APE
 - `WT3_dual_backrot03.tum` / `WT3_dual_clamponly.tum` — 后雷达降权 / 钳制
 - `WT3_dual_yawprior*.tum` — yaw 先验
 - `HH2_dual_fusion.tum` / `HH2_dual_merge.tum` — HH2 融合 / 拼接
+- `AT1_dual_fusion.tum` / `AT1_dual_merge.tum` — AT1 (Aberdeen) 融合 / 拼接
+
+## 11. AT1 (Aberdeen 穿山隧道) 消融（2026-09-25）
+
+复用 WT3 同套 config/launch（传感器结构实测一致：Ouster 32×1024 + M1 15750×5），
+仅换 bag 路径 + GT 路径。GT = `AT1_77_1_bus_grt_path.txt`（2.78km，596 点）。
+
+| 指标 | AT1 融合 | AT1 拼接 |
+|---|---|---|
+| ICP 残差 (m) | 30.65 | 34.09 |
+| 覆盖 (m) | 550 | 603 |
+| 尺度膨胀 (x) | 4.02 | 2.74 |
+| 横向误差 \|mean\| (m) | 30.59 | 33.91 |
+| 纵向误差 \|mean\| (m) | 1.33 | 2.19 |
+
+**结论（诚实）**：Aberdeen 比 WT3 难得多——两方法都退化到 ~30m 残差（WT3 融合仅 3.83m）。
+数据集标注 AT1 为"高速 + 大量动态车辆"的退化隧道，动态噪声叠加沿行进方向退化导致严重横向漂移。
+融合仍优于拼接（残差 30.65 vs 34.09，~11%），但优势远小于 WT3 的 56%；且拼接在 AT1 **没有停滞**
+（覆盖 603m），膨胀（2.74x）反而低于融合（4.02x）。→ 结论必须限定："融合防退化失效"在 WT3 强、
+AT1 弱；不能宣称融合普适更优。
+
+复现：`bash experiments/scripts/run_at1_fusion.sh` / `run_at1_merge.sh`；评估 `python3 experiments/scripts/plot_at1_ablation.py`。
+数据：`data/at1_ablation_metrics.json`；图：`figures/at1_ablation_*.png`。
+
+### 11b. AT1 退化诊断 + 里程计调查（负结果，支撑"观测性极限"结论）
+
+**DEGEN 诊断**（`degeneracyLogOnly:true`，只记 EVD 不投影，轨迹与融合版一致）：后雷达 M1 的 Schur
+平移条件数 condT 干净段（t<513s）稳定在 4–13，随后爬升 23→42→52，**首次 isDeg=1 @ t≈606s
+（condT=52，越过 degeneracyCondThresh=50）**；弱方向 weakIdx 分布 `{0(roll):101, 3(平移x):110}`，
+退化段锁定 **weakIdx=3 = 沿轨道平移 x**——与 WT3 根因完全一致。前雷达 Ouster 因共享
+`static int degDbg` 计数器只记到 3 条（vs 后雷达 208 条），但几何上它与后雷达看到同一堵平行墙，
+必然同样失去 x 可观测性。
+
+**里程计调查**：bag 里**没有** config 写的 `/odom`（轮速）。仅有的里程计来源是 mavros/PX4 自驾仪的
+`/mavros/local_position/odom`、`/mavros/odometry/in`、`/mavros/global_position/local`（30–50Hz）：
+
+| 话题 | 消息数 | 水平路径长 | 净位移 |
+|---|---|---|---|
+| `/mavros/local_position/odom` | 18094 | 531 m | **7.7 m** |
+| `/mavros/odometry/in` | 18085 | 531 m | 7.7 m |
+| `/mavros/global_position/local` | 29901 | 549 m | — |
+| 巴士 GT | — | **2780 m** | 2780 m |
+
+三个 odom 水平路径都只有 ~530m，而净位移仅 **7.7m**——**原地蛇形摆动 531m 却几乎不前进**。
+这不是 scale 误差（否则路径≈净位移），而是 **PX4 EKF 在隧道里 GPS 失效后纯 IMU 航位推算的停滞**。
+即：**这台车自己的导航栈（PX4 EKF）在这个隧道里也停摆了**，且失败模式与我们 lidar fusion（覆盖 550m）
+一模一样。
+
+**结论（重要负结果）**：AT1 是 GPS 拒止 + 无轮速编码器 + MEMS 级 IMU 的穿山隧道，**唯一沿轨道信号
+是 IMU 航位推算，而它在 ~530m 处崩**。因此"融合外部里程计锚定 x 方向"在此场景走不通——odom 本身
+比我们的 lidar 还退化。AT1 的 ~30m 残差已接近该场景的**观测性物理上限**，fusion vs merge 的微小差异
+（11%）不应被夸大。这反向强化了论文主结论：约束级融合的价值在于**良态/退化场景间的鲁棒性跨度**
+（WT3 防停滞 56%、HH2 相当），而非在观测性先天缺失的场景里无中生有。
+

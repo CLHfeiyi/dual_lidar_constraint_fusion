@@ -1531,7 +1531,7 @@ public:
         bout = braw[lid];
 
         // 退化处理开关：关闭时纯 Hf+Hb 融合（等价 ε=1e-8 基线），不做方向降权。
-        if (!degeneracyEnable)
+        if (!degeneracyEnable && !degeneracyLogOnly)
         {
             isDeg[lid] = false;
             dW[lid].setOnes();
@@ -1599,7 +1599,10 @@ public:
         weakIdx[lid] = (int)mi;
         vWeak[lid] = eigVecs[lid].col(mi);
 
-        projMat[lid] = eigVecs[lid] * dW[lid].asDiagonal() * eigVecs[lid].transpose();
+        if (degeneracyLogOnly)
+            projMat[lid].setIdentity();   // 诊断模式：只记录退化信息，不投影更新量
+        else
+            projMat[lid] = eigVecs[lid] * dW[lid].asDiagonal() * eigVecs[lid].transpose();
 
         static int degDbg = 0;
         if (++degDbg <= 5 || degDbg % 100 == 0)
@@ -1610,7 +1613,7 @@ public:
     // 双雷达退化一致性抑制（创新点4）：同向退化时进一步削弱叠加，避免过度自信
     void consistencySuppression(Eigen::Matrix<double,6,6>& HbAdj, Eigen::Matrix<double,6,1>& bbAdj)
     {
-        if (!degeneracyEnable) return;
+        if (!degeneracyEnable || degeneracyLogOnly) return;
         double c = fabs(vWeak[0].dot(vWeak[1]));
         if (isDeg[0] && isDeg[1] && c > consistencyThreshold)
         {

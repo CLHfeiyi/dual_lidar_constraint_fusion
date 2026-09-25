@@ -1,0 +1,20 @@
+<launch>
+    <arg name="traj_output" default="/tmp/at1_diag.tum" />
+
+    <param name="/use_sim_time" value="true" />
+
+    <node pkg="tf" type="static_transform_publisher" name="tf_os_sensor"
+          args="0 0 0 0 0 0 base_link os_sensor 100" />
+    <node pkg="tf" type="static_transform_publisher" name="tf_rslidar"
+          args="0 0 0 0 0 0 base_link rslidar 100" />
+    <node pkg="tf" type="static_transform_publisher" name="tf_imu"
+          args="0 0 0 0 0 0 base_link /imu 100" />
+
+    <!-- AT1 退化诊断：degeneracyLogOnly=true，只记 EVD 不投影 -->
+    <rosparam file="$(find lio_sam)/config/params_at1_diag.yaml" command="load" />
+    <node pkg="lio_sam" type="lio_sam_paper" name="lio_sam_paper" output="screen" />
+
+    <node pkg="lio_sam" type="trajectory_saver.py" name="trajectory_saver" output="log">
+        <param name="output_path" value="$(arg traj_output)" />
+    </node>
+</launch>

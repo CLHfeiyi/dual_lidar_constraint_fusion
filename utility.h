@@ -120,6 +120,7 @@ public:
     float consistencyThreshold;   // |v_weak_f·v_weak_b| threshold for same-direction suppression
     float degeneracyCondThresh;   // DCReg: Schur-subspace condition number κ>this → degenerate (detection)
     float degeneracyKappaTg;      // DCReg: target condition number for eigenvalue clamping (mitigation)
+    bool degeneracyLogOnly;       // diagnostic: compute+log EVD (condR/condT/weakIdx) but do NOT project dx
 
     // IMU
     float imuAccNoise;
@@ -271,6 +272,7 @@ public:
         nh.param<float>("lio_sam/consistencyThreshold", consistencyThreshold, 0.8);
         nh.param<float>("lio_sam/degeneracyCondThresh", degeneracyCondThresh, 50.0);
         nh.param<float>("lio_sam/degeneracyKappaTg", degeneracyKappaTg, 10.0);
+        nh.param<bool>("lio_sam/degeneracyLogOnly", degeneracyLogOnly, false);
 
         nh.param<float>("lio_sam/imuAccNoise", imuAccNoise, 0.01);
         nh.param<float>("lio_sam/imuGyrNoise", imuGyrNoise, 0.001);
