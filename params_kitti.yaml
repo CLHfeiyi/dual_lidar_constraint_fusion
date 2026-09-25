@@ -1,0 +1,55 @@
+# KITTI parameters for lio_sam (IEKF + VGICP)
+
+# Topics
+odomTopic: "/odometry/imu_incremental"
+imuTopic: "/imu/data"
+
+# LiDAR config (HDL-64E)
+N_SCAN: 64
+Horizon_SCAN: 2084
+downsampleRate: 2
+
+# Feature extraction
+edgeThreshold: 0.1
+surfThreshold: 0.1
+odometrySurfLeafSize: 0.4
+
+# IMU
+imuAccQueueLength: 200
+imuGyrQueueLength: 200
+imuAccBias: [0.0, 0.0, 0.0]
+imuGyrBias: [0.0, 0.0, 0.0]
+imuGravity: 9.80511
+
+# Extrinsics (LiDAR to IMU)
+extrinsicRot: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+extrinsicTrans: [0.0, 0.0, 0.0]
+
+# Loop closure
+loopClosureEnableFlag: true
+loopClosureFrequency: 1.0
+surroundingKeyframeSearchRadius: 30.0
+loopClosureHistoryKeyframeSearchRadius: 15.0
+loopClosureHistoryKeyframeSearchNum: 25
+loopClosureHistoryKeyframeFitnessScore: 0.3
+
+# Keyframe
+surroundingkeyframeAddingDistThreshold: 0.4
+surroundingkeyframeAddingAngleThreshold: 0.2
+surroundingKeyframeDensity: 2.0
+
+# Mapping
+mappingProcessInterval: 0.15
+
+# ISAM2
+relinearizeThreshold: 0.01
+relinearizeSkip: 10
+
+# Visualization
+globalMapVisualizationSearchRadius: 50.0
+globalMapVisualizationLeafSize: 2.0
+globalMapVisualizationPoseDensity: 10.0
+
+# Save
+savePCD: false
+savePCDDirectory: "/tmp/"

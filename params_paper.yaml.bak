@@ -1,0 +1,150 @@
+lio_sam:
+
+  # Topics
+  pointCloudTopic: "points_raw"               # Point cloud data
+  imuTopic: "imu_raw"                         # IMU data
+  odomTopic: "odometry/imu"                   # IMU pre-preintegration odometry
+  gpsTopic: "odometry/gpsz"                   # GPS odometry topic
+
+  # Frames
+  lidarFrame: "base_link"
+  baselinkFrame: "base_link"
+  odometryFrame: "odom"
+  mapFrame: "map"
+
+  # GPS Settings
+  useImuHeadingInitialization: true
+  useGpsElevation: false
+  gpsCovThreshold: 2.0
+  poseCovThreshold: 25.0
+
+  # Export settings
+  savePCD: false
+  savePCDDirectory: "/Downloads/LOAM/"
+
+  # Sensor Settings
+  sensor: velodyne                            # lidar sensor type: velodyne, ouster, livox
+  N_SCAN: 16                                  # number of lidar channels
+  Horizon_SCAN: 1800                          # lidar horizontal resolution
+  downsampleRate: 1                           # downsampling rate
+  lidarMinRange: 1.0                          # minimum lidar range (m)
+  lidarMaxRange: 1000.0                       # maximum lidar range (m)
+
+  # IMU Settings
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
+  imuAccBiasN: 6.4356659353532566e-05
+  imuGyrBiasN: 3.5640318696367613e-05
+  imuGravity: 9.80511
+  imuRPYWeight: 0.01
+
+  # Extrinsics: T_lb (lidar -> imu)
+  extrinsicTrans: [0.0, 0.0, 0.0]
+  extrinsicRot: [-1, 0, 0,
+                  0, 1, 0,
+                  0, 0, -1]
+  extrinsicRPY: [0, -1, 0,
+                 1, 0, 0,
+                 0, 0, 1]
+
+  # LOAM feature threshold (论文公式2相关)
+  edgeThreshold: 1.0
+  surfThreshold: 0.1
+  edgeFeatureMinValidNum: 10
+  surfFeatureMinValidNum: 100
+
+  # voxel filter params
+  odometrySurfLeafSize: 0.4                   # outdoor: 0.4, indoor: 0.2
+  mappingCornerLeafSize: 0.1                  # coal mine: 0.1
+  mappingSurfLeafSize: 0.2                    # coal mine: 0.2
+
+  # Robot motion constraint
+  z_tollerance: 1000
+  rotation_tollerance: 1000
+
+  # CPU Params
+  numberOfCores: 4
+  mappingProcessInterval: 0.15
+
+  # Surrounding map
+  surroundingkeyframeAddingDistThreshold: 1.0
+  surroundingkeyframeAddingAngleThreshold: 0.2
+  surroundingKeyframeDensity: 2.0
+  surroundingKeyframeSearchRadius: 50.0
+
+  # Loop closure (VGICP 回环检测, 论文公式19-28)
+  loopClosureEnableFlag: true
+  loopClosureFrequency: 1.0
+  surroundingKeyframeSize: 50
+  historyKeyframeSearchRadius: 15.0           # 空间搜索半径 (论文公式22)
+  historyKeyframeSearchTimeDiff: 30.0         # 时间间隔阈值
+  historyKeyframeSearchNum: 25                # 融合关键帧数
+  historyKeyframeFitnessScore: 0.3            # 配准适应度阈值
+
+  # VGICP parameters (论文公式19-28相关)
+  vgicpVoxelResolution: 1.0                   # 体素分辨率 (论文公式23)
+  vgicpNeighborRadius: 1.5                    # 近邻搜索半径 (论文公式22)
+  vgicpMaxIterations: 30                      # VGICP最大迭代次数
+  vgicpConvergenceThreshold: 0.001            # VGICP收敛阈值
+  vgicpDistanceThreshold: 5.0                 # 回环验证距离阈值 (论文公式28)
+
+  # Visualization
+  globalMapVisualizationSearchRadius: 1000.0
+  globalMapVisualizationPoseDensity: 10.0
+  globalMapVisualizationLeafSize: 1.0
+
+
+# Navsat (convert GPS coordinates to Cartesian)
+navsat:
+  frequency: 50
+  wait_for_datum: false
+  delay: 0.0
+  magnetic_declination_radians: 0
+  yaw_offset: 0
+  zero_altitude: true
+  broadcast_utm_transform: false
+  broadcast_utm_transform_as_parent_frame: false
+  publish_filtered_gps: false
+
+# EKF for Navsat
+ekf_gps:
+  publish_tf: false
+  map_frame: map
+  odom_frame: odom
+  base_link_frame: base_link
+  world_frame: odom
+  frequency: 50
+  two_d_mode: false
+  sensor_timeout: 0.01
+  imu0: imu_correct
+  imu0_config: [false, false, false,
+                true,  true,  true,
+                false, false, false,
+                false, false, true,
+                true,  true,  true]
+  imu0_differential: false
+  imu0_queue_size: 50
+  imu0_remove_gravitational_acceleration: true
+  odom0: odometry/gps
+  odom0_config: [true,  true,  true,
+                 false, false, false,
+                 false, false, false,
+                 false, false, false,
+                 false, false, false]
+  odom0_differential: false
+  odom0_queue_size: 10
+  process_noise_covariance: [1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 1.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 10.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0.03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0.03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0.25, 0, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0.04, 0, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01, 0, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01, 0, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5, 0, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01, 0, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.01, 0,
+                              0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.015]

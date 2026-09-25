@@ -1,0 +1,22 @@
+<launch>
+    <arg name="traj_output" default="/tmp/hkmems_single_traj.tum" />
+
+    <param name="/use_sim_time" value="true" />
+
+    <!-- Static transform: Ouster sensor -> base_link -->
+    <node pkg="tf" type="static_transform_publisher" name="tf_os_sensor"
+          args="0 0 0 0 0 0 base_link os_sensor 100" />
+    <node pkg="tf" type="static_transform_publisher" name="tf_imu"
+          args="0 0 0 0 0 0 base_link /imu 100" />
+
+    <!-- LIO-SAM Paper (IEKF + VGICP) single LiDAR: Ouster OS1-32 only -->
+    <rosparam file="$(find lio_sam)/config/params_hkmems_single.yaml" command="load" />
+    <node pkg="lio_sam" type="lio_sam_paper" name="lio_sam_paper" output="screen">
+        <remap from="/points_raw" to="/ouster/points" />
+    </node>
+
+    <!-- Trajectory saver: records odometry to TUM file -->
+    <node pkg="lio_sam" type="trajectory_saver.py" name="trajectory_saver" output="log">
+        <param name="output_path" value="$(arg traj_output)" />
+    </node>
+</launch>

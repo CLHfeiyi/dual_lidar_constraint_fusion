@@ -1,0 +1,22 @@
+# --- 大文件 / 非代码产物 ---
+ESG报告/
+35m_corridor_evaluation/
+figures/
+*.docx
+
+# --- 实验生成物（二进制图/数据；保留 JSON、脚本、RESULTS.md） ---
+experiments/figures/
+experiments/data/*.npz
+
+# --- Python 缓存 ---
+__pycache__/
+*.pyc
+
+# --- 构建产物 ---
+build/
+devel/
+*.o
+
+# --- 本地 / IDE ---
+.vscode/
+.claude/

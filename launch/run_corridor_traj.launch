@@ -1,0 +1,9 @@
+<launch>
+    <arg name="traj_output" default="/tmp/corridor_traj.tum" />
+    <param name="/use_sim_time" value="true" />
+    <rosparam file="$(find lio_sam)/config/params_corridor.yaml" command="load" />
+    <node pkg="lio_sam" type="lio_sam_paper" name="lio_sam_paper" output="screen" />
+    <node pkg="lio_sam" type="trajectory_saver.py" name="trajectory_saver" output="log">
+        <param name="output_path" value="$(arg traj_output)" />
+    </node>
+</launch>

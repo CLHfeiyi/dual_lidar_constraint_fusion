@@ -1,0 +1,46 @@
+<launch>
+  <!-- lio_sam_paper for KITTI with rosbag playback -->
+
+    <param name="/use_sim_time" value="true" />
+    <arg name="rviz_enable" default="false" />
+
+    <!-- Load paper algorithm params (KITTI-tuned) -->
+    <rosparam file="$(find lio_sam)/params_kitti.yaml" command="load" />
+
+    <!-- KITTI HDL-64E: 64 scan lines, 1800+ horizontal resolution -->
+    <param name="lio_sam/N_SCAN" value="64" />
+    <param name="lio_sam/Horizon_SCAN" value="2084" />
+
+    <!-- Memory-optimized for KITTI highway driving -->
+    <param name="lio_sam/downsampleRate" value="2" />
+    <param name="lio_sam/edgeThreshold" value="0.1" />
+    <param name="lio_sam/surfThreshold" value="0.1" />
+    <param name="lio_sam/odometrySurfLeafSize" value="0.4" />
+    <!-- Keyframe management: tuned for KITTI ~700m trajectory -->
+    <param name="lio_sam/surroundingkeyframeAddingDistThreshold" value="0.4" />
+    <param name="lio_sam/surroundingkeyframeAddingAngleThreshold" value="0.2" />
+    <param name="lio_sam/surroundingKeyframeSearchRadius" value="30.0" />
+    <param name="lio_sam/surroundingKeyframeDensity" value="2.0" />
+    <param name="lio_sam/mappingProcessInterval" value="0.15" />
+    <!-- ISAM2 optimization tuning: reduce relinearization -->
+    <param name="lio_sam/relinearizeThreshold" value="0.01" />
+    <param name="lio_sam/relinearizeSkip" value="10" />
+    <!-- Reduce global map visualization memory -->
+    <param name="lio_sam/globalMapVisualizationSearchRadius" value="50.0" />
+    <param name="lio_sam/globalMapVisualizationLeafSize" value="2.0" />
+
+    <!-- Loop closure and extrinsic in params_kitti.yaml -->
+
+    <!-- Paper SLAM node: IEKF + VGICP loop closure -->
+    <node pkg="lio_sam" type="lio_sam_paper" name="lio_sam_paper" output="screen">
+        <!-- Map KITTI bag topics to algorithm's expected topic names -->
+        <remap from="/points_raw" to="/velodyne_points" />
+        <remap from="/imu_raw" to="/imu/data" />
+        <remap from="/odometry/gpsz" to="/odometry_gt" />
+    </node>
+
+    <!-- Optional RViz -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lio_sam)/rviz_cfg/loam_livox.rviz"
+          if="$(arg rviz_enable)" />
+
+</launch>

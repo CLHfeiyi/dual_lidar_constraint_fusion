@@ -1,0 +1,94 @@
+lio_sam:
+
+  # Topics
+  pointCloudTopic: "/points_raw"                # Remapped to /ouster/points in launch
+  imuTopic: "/imu/data"                         # IMU data (Xsens MTI-30)
+  odomTopic: "/odom"                            # Wheel odometry (not used)
+  gpsTopic: "/odometry/gpsz"                    # GPS topic (optional)
+
+  # Frames
+  lidarFrame: "base_link"
+  baselinkFrame: "base_link"
+  odometryFrame: "odom"
+  mapFrame: "map"
+
+  # GPS Settings
+  useImuHeadingInitialization: false
+  useGpsElevation: false
+  gpsCovThreshold: 2.0
+  poseCovThreshold: 25.0
+
+  # Export settings
+  savePCD: false
+  savePCDDirectory: "/Downloads/LOAM/"
+
+  # Sensor Settings (Ouster OS1-32 only)
+  sensor: velodyne
+  N_SCAN: 32
+  Horizon_SCAN: 1800
+  downsampleRate: 1
+  lidarMinRange: 1.0
+  lidarMaxRange: 1000.0
+
+  # IMU Settings (Xsens MTI-30)
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
+  imuAccBiasN: 6.4356659353532566e-05
+  imuGyrBiasN: 3.5640318696367613e-05
+  imuGravity: 9.80511
+  imuRPYWeight: 0.01
+
+  # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
+  extrinsicTrans: [0.0, 0.0, 0.0]
+  extrinsicRot: [1, 0, 0,
+                  0, 1, 0,
+                  0, 0, 1]
+  extrinsicRPY: [1, 0, 0,
+                  0, 1, 0,
+                  0, 0, 1]
+
+  # LOAM feature threshold
+  edgeThreshold: 1.0
+  surfThreshold: 0.1
+  edgeFeatureMinValidNum: 10
+  surfFeatureMinValidNum: 100
+
+  # voxel filter params
+  odometrySurfLeafSize: 0.4
+  mappingCornerLeafSize: 0.1
+  mappingSurfLeafSize: 0.2
+
+  # Robot motion constraint
+  z_tollerance: 1000
+  rotation_tollerance: 1000
+
+  # CPU Params
+  numberOfCores: 4
+  mappingProcessInterval: 0.15
+
+  # Surrounding map
+  surroundingkeyframeAddingDistThreshold: 1.0
+  surroundingkeyframeAddingAngleThreshold: 0.2
+  surroundingKeyframeDensity: 2.0
+  surroundingKeyframeSearchRadius: 50.0
+
+  # Loop closure (VGICP)
+  loopClosureEnableFlag: true
+  loopClosureFrequency: 1.0
+  surroundingKeyframeSize: 50
+  historyKeyframeSearchRadius: 15.0
+  historyKeyframeSearchTimeDiff: 30.0
+  historyKeyframeSearchNum: 25
+  historyKeyframeFitnessScore: 0.3
+
+  # VGICP parameters
+  vgicpVoxelResolution: 1.0
+  vgicpNeighborRadius: 1.5
+  vgicpMaxIterations: 30
+  vgicpConvergenceThreshold: 0.001
+  vgicpDistanceThreshold: 5.0
+
+  # Visualization
+  globalMapVisualizationSearchRadius: 1000.0
+  globalMapVisualizationPoseDensity: 10.0
+  globalMapVisualizationLeafSize: 1.0
