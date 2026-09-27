@@ -1,0 +1,24 @@
+<launch>
+    <arg name="traj_output" default="/tmp/at1_dual_adaptive.tum" />
+
+    <param name="/use_sim_time" value="true" />
+
+    <!-- Static transforms: LiDAR sensors -> base_link (identity for now) -->
+    <node pkg="tf" type="static_transform_publisher" name="tf_os_sensor"
+          args="0 0 0 0 0 0 base_link os_sensor 100" />
+    <node pkg="tf" type="static_transform_publisher" name="tf_rslidar"
+          args="0 0 0 0 0 0 base_link rslidar 100" />
+    <node pkg="tf" type="static_transform_publisher" name="tf_imu"
+          args="0 0 0 0 0 0 base_link /imu 100" />
+
+    <!-- LIO-SAM Paper dual LiDAR: adaptive IMU weight (base imuWeight=1.0, adapt down on conflict) -->
+    <rosparam file="$(find lio_sam)/config/params_at1_dual.yaml" command="load" />
+    <param name="lio_sam/adaptiveImuWeight" value="true" />
+    <param name="lio_sam/imuWeight" value="1.0" />
+    <node pkg="lio_sam" type="lio_sam_paper" name="lio_sam_paper" output="screen" />
+
+    <!-- Trajectory saver: records odometry to TUM file -->
+    <node pkg="lio_sam" type="trajectory_saver.py" name="trajectory_saver" output="log">
+        <param name="output_path" value="$(arg traj_output)" />
+    </node>
+</launch>

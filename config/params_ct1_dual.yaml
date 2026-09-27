@@ -87,10 +87,9 @@ lio_sam:
   onlineExtrinsicCalib: false       # 双雷达外参在线标定
 
   # 自适应 IMU 权重参数（adaptiveImuWeight=true 时生效）
-  imuAdaptEmaAlpha: 0.05            # EMA 平滑系数
-  imuAdaptObsThresh: 500.0          # lidar yaw 可观测性阈值 H(2,2)
-  imuAdaptConflictThresh: 0.05      # IMU-lidar yaw 冲突阈值（rad）
-  imuWeightMin: 0.1                 # 自适应权重下限
+  imuAdaptEmaAlpha: 0.05            # 退化置信度 EMA 平滑系数（0..1，越小响应越慢）
+  imuAdaptDegThresh: 50.0           # 平移子空间条件数阈值（condT>此值判退化 regime → 信任 IMU）
+  imuWeightMin: 0.1                 # 非退化 regime 的 IMU 权重下限（信任 lidar）
 
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]

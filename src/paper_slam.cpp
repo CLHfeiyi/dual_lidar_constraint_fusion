@@ -175,7 +175,9 @@ public:
     double iekfRefYaw;                // IEKF yaw at last LM update (for relative prior)
     double iekfRefVx, iekfRefVy;      // IEKF velocity at last LM update (for relative prior)
     bool headingInitialized;          // whether initial heading has been extracted from GPS/GT
-    double imuWeightAdaptive;         // 在线自适应 IMU 权重（EMA 平滑，初始=imuWeight）
+    double imuWeightAdaptive;         // 在线自适应 IMU 权重（regime 切换，初始=imuWeight）
+    double transDegBelief;            // 平移退化置信度 EMA（0..1，>0.5 判退化 regime → 信任 IMU）
+    double condT[2];                  // 每雷达平移子空间条件数（Schur 补后）
 
     // ---- 点云数据 ----
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn[2];
@@ -304,6 +306,8 @@ public:
                   maxDistFromOrigin_(0.0)
     {
         imuWeightAdaptive = imuWeight;
+        transDegBelief = 0.0;
+        condT[0] = condT[1] = 1.0;
 
         // 初始化ISAM2 (performance-tuned: reduce relinearization frequency)
         ISAM2Params parameters;
@@ -1358,13 +1362,6 @@ public:
                 Eigen::Vector3d euler = IEKFStatePaper::quaternionToEuler(iekf.state.rotation);
                 double r_yaw = transformTobeMapped[2] - euler.x();
                 if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
-                if (adaptiveImuWeight && iterCount == 0)
-                {
-                    double target = imuWeight;
-                    if (H(2,2) > imuAdaptObsThresh && fabs(r_yaw) > imuAdaptConflictThresh)
-                        target = imuWeightMin;
-                    imuWeightAdaptive += imuAdaptEmaAlpha * (target - imuWeightAdaptive);
-                }
                 H(2,2) += imuWeightAdaptive * yawW; b(2) += imuWeightAdaptive * yawW * r_yaw;
             }
         }
@@ -1545,13 +1542,15 @@ public:
         bout = braw[lid];
 
         // 退化处理开关：关闭时纯 Hf+Hb 融合（等价 ε=1e-8 基线），不做方向降权。
-        if (!degeneracyEnable && !degeneracyLogOnly)
+        // adaptiveImuWeight 需要 condT/weakIdx 作退化信号，故该开关下也走 EVD 计算（但不投影）。
+        if (!degeneracyEnable && !degeneracyLogOnly && !adaptiveImuWeight)
         {
             isDeg[lid] = false;
             dW[lid].setOnes();
             projMat[lid].setIdentity();
             weakIdx[lid] = 0;
             vWeak[lid].setZero();
+            condT[lid] = 1.0;
             return;
         }
 
@@ -1594,6 +1593,7 @@ public:
         double lamTmax = std::max(lamT(2), 1e-12);
         double condR = lamRmax / std::max(lamR(0), 1e-12);
         double condT = lamTmax / std::max(lamT(0), 1e-12);
+        this->condT[lid] = condT;
 
         // DCReg 检测：任一解耦子空间条件数超过阈值即判退化
         isDeg[lid] = (condR > degeneracyCondThresh) || (condT > degeneracyCondThresh);
@@ -1613,10 +1613,10 @@ public:
         weakIdx[lid] = (int)mi;
         vWeak[lid] = eigVecs[lid].col(mi);
 
-        if (degeneracyLogOnly)
-            projMat[lid].setIdentity();   // 诊断模式：只记录退化信息，不投影更新量
-        else
+        if (degeneracyEnable && !degeneracyLogOnly)
             projMat[lid] = eigVecs[lid] * dW[lid].asDiagonal() * eigVecs[lid].transpose();
+        else
+            projMat[lid].setIdentity();   // 诊断/自适应模式：只记录退化信息，不投影更新量
 
         static int degDbg = 0;
         if (++degDbg <= 5 || degDbg % 100 == 0)
@@ -1693,17 +1693,17 @@ public:
             if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
             if (adaptiveImuWeight && iterCount == 0)
             {
-                double target = imuWeight;
-                if (H_yaw_lidar > imuAdaptObsThresh && fabs(r_yaw) > imuAdaptConflictThresh)
-                    target = imuWeightMin;
-                imuWeightAdaptive += imuAdaptEmaAlpha * (target - imuWeightAdaptive);
+                double degFlag = (condT[0] > imuAdaptDegThresh) ? 1.0 : 0.0;
+                transDegBelief += imuAdaptEmaAlpha * (degFlag - transDegBelief);
+                imuWeightAdaptive = (transDegBelief >= 0.5) ? imuWeight : imuWeightMin;
             }
             H(2,2) += imuWeightAdaptive * yawW; b(2) += imuWeightAdaptive * yawW * r_yaw;
         }
 
         static int yawDbg = 0;
         if (++yawDbg <= 5 || yawDbg % 200 == 0)
-            ROS_INFO("YAW_PRIOR H_yaw=%.2e yawW=%.2e (gain=%.2f)", H_yaw_lidar, yawW, (double)yawPriorGain);
+            ROS_INFO("YAW_PRIOR H_yaw=%.2e condT0=%.2e degBelief=%.2f imuW_adapt=%.3f",
+                     H_yaw_lidar, condT[0], transDegBelief, imuWeightAdaptive);
 
         float lambda;
         if (iterCount < 2) lambda = 1e-2;
