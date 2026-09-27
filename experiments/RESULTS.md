@@ -297,3 +297,43 @@ MEMS-LIO 26.41m（膨胀 35×）、FAST-LIO2 562m（彻底发散）。紧耦合 
 
 复现：`bash experiments/scripts/run_at1_adaptive.sh` / `run_wt3_adaptive.sh`（launch 设
 `adaptiveImuWeight=true, imuWeight=1.0`）。轨迹：`AT1_dual_adaptive.tum` / `WT3_dual_adaptive.tum`。
+
+
+## 15. dynamicOutlierRemoval（2026-09-27，负向——单帧残差鲁棒核无法区分动态物体与漂移）
+
+实现 `dynamicOutlierRemoval` 开关（默认 false）：在 `accumulateLidarHessian`（双路）与
+`combineOptimization`（拼接路）的 corner/surf 残差加权处，把软核 `1/(1+|r|)` 替换为 Cauchy 核
+`1/(1+(r/σ)²)`（σ=`dynamicOutlierSigma`=0.5），权重低于 `dynamicOutlierMinWeight`=0.05 的点判为
+动态/外点剔除。IRLS（每 LM 迭代重加权）本就隐式存在。目标：用更陡的鲁棒核压制动态车辆的大残差。
+
+| 场景 | 方法 | ICP 残差 (m) | 覆盖 (m) | 路径 (m) | 膨胀 (x) |
+|---|---|---|---|---|---|
+| AT1 | 静态 imuW=0.1 | 8.48 | 527.4 | 1980.8 | 3.76 |
+| AT1 | dynamicOutlierRemoval (σ=0.5) | 9.05 | 522.9 | 2042.7 | 3.91 |
+| WT3 | 静态 imuW=1.0 (extfix) | 3.83 | **576.4** | 917.5 | 1.59 |
+| WT3 | dynamicOutlierRemoval (σ=0.5) | 2.59 | **365.8** | 377.9 | 1.03 |
+
+**结论（负向，单帧残差鲁棒核被证伪）**：
+
+1. **AT1（动态场景）无收益**：9.05 vs 8.48m（+0.57m，逼近 run 噪声 ~0.5m 上限，中性到略差）。
+   Cauchy 核无法区分"动态车辆的残差"与"漂移导致的残差"——两者都被同等地降权，故没有任何**选择性**
+   增益。覆盖/膨胀也基本持平（522.9/3.91 vs 527.4/3.76）。
+
+2. **WT3（静态退化）明显退化**：覆盖 576→366m（停滞），路径 918→378m。残差 2.59m 与膨胀 1.03x 的
+   "改善"是**冻结团块贴近 GT 的对齐假象**（系统停止移动），不是真跟踪——与 adaptiveImuWeight 在 WT3
+   的 22m 停滞同源。根因：退化隧道里那些"大残差"点恰恰是**唯一的沿轨道 x 弱锚点**，Cauchy 核把它们当
+   "外点"剔除，等于拆掉了 x 方向的最后约束 → 提前停滞。
+
+3. **根因（残差幅值不是有效的动态性信号）**：动态物体检测需要**时间维度**（占据栅格持久性 /
+   多帧一致性 / 自由空间雕刻），而非单帧残差鲁棒性。单帧 Cauchy 核把"动态物体"与"退化方向的漂移"混为一
+   谈，前者要压、后者要保，方向相反。
+
+4. **对后续的启示**：`dynamicOutlierRemoval` 按 config 注释"鲁棒核 + IRLS"的原义实现到此为止，结果负。
+   真正能区分动态性的是时序信号（点在地图中的持续出现/消失），属于更大的工程量，不是一次核函数替换能
+   解决的。与 condT（§14）一致：**在线启发式信号在退化隧道里都会在需要时崩溃**，本工作的实际贡献仍是
+   双雷达约束级融合本身（§5/§13），而非这些自适应增强。
+
+复现：`bash experiments/scripts/run_at1_dynamic.sh` / `run_wt3_dynamic.sh`（launch 设
+`dynamicOutlierRemoval=true`，AT1 imuWeight=0.1、WT3 imuWeight=1.0）。评估
+`python3 experiments/scripts/eval_dynamic.py`，数据 `data/dynamic_metrics.json`。
+轨迹：`AT1_dual_dynamic.tum` / `WT3_dual_dynamic.tum`。
