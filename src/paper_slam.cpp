@@ -175,6 +175,7 @@ public:
     double iekfRefYaw;                // IEKF yaw at last LM update (for relative prior)
     double iekfRefVx, iekfRefVy;      // IEKF velocity at last LM update (for relative prior)
     bool headingInitialized;          // whether initial heading has been extracted from GPS/GT
+    double imuWeightAdaptive;         // 在线自适应 IMU 权重（EMA 平滑，初始=imuWeight）
 
     // ---- 点云数据 ----
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn[2];
@@ -302,6 +303,8 @@ public:
                   lastIEKFPredictTime(-1),
                   maxDistFromOrigin_(0.0)
     {
+        imuWeightAdaptive = imuWeight;
+
         // 初始化ISAM2 (performance-tuned: reduce relinearization frequency)
         ISAM2Params parameters;
         parameters.relinearizeThreshold = 0.01;
@@ -814,7 +817,7 @@ public:
                 float x1 = pt.x - posXCur;
                 float y1 = pt.y - posYCur;
                 float z1 = pt.z - posZCur;
-                float rx = imuWeight * rotXCur, ry = imuWeight * rotYCur, rz = imuWeight * rotZCur;
+                float rx = imuWeightAdaptive * rotXCur, ry = imuWeightAdaptive * rotYCur, rz = imuWeightAdaptive * rotZCur;
                 float rx2 = rx * rx, ry2 = ry * ry, rz2 = rz * rz;
                 float s = rx2 + ry2 + rz2;
                 if (s > 0)
@@ -1141,8 +1144,8 @@ public:
                 transformTobeMapped[0] = cloudKeyPoses6D->points[lastIdx].roll;
                 transformTobeMapped[1] = cloudKeyPoses6D->points[lastIdx].pitch;
                 transformTobeMapped[2] = cloudKeyPoses6D->points[lastIdx].yaw;
-                transformTobeMapped[3] = lastScanPosX + imuWeight * iekf.state.velocity.x() * dt;
-                transformTobeMapped[4] = lastScanPosY + imuWeight * iekf.state.velocity.y() * dt;
+                transformTobeMapped[3] = lastScanPosX + imuWeightAdaptive * iekf.state.velocity.x() * dt;
+                transformTobeMapped[4] = lastScanPosY + imuWeightAdaptive * iekf.state.velocity.y() * dt;
             }
             else
             {
@@ -1355,7 +1358,14 @@ public:
                 Eigen::Vector3d euler = IEKFStatePaper::quaternionToEuler(iekf.state.rotation);
                 double r_yaw = transformTobeMapped[2] - euler.x();
                 if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
-                H(2,2) += imuWeight * yawW; b(2) += imuWeight * yawW * r_yaw;
+                if (adaptiveImuWeight && iterCount == 0)
+                {
+                    double target = imuWeight;
+                    if (H(2,2) > imuAdaptObsThresh && fabs(r_yaw) > imuAdaptConflictThresh)
+                        target = imuWeightMin;
+                    imuWeightAdaptive += imuAdaptEmaAlpha * (target - imuWeightAdaptive);
+                }
+                H(2,2) += imuWeightAdaptive * yawW; b(2) += imuWeightAdaptive * yawW * r_yaw;
             }
         }
 
@@ -1681,7 +1691,14 @@ public:
             Eigen::Vector3d euler = IEKFStatePaper::quaternionToEuler(iekf.state.rotation);
             double r_yaw = transformTobeMapped[2] - euler.x();
             if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
-            H(2,2) += imuWeight * yawW; b(2) += imuWeight * yawW * r_yaw;
+            if (adaptiveImuWeight && iterCount == 0)
+            {
+                double target = imuWeight;
+                if (H_yaw_lidar > imuAdaptObsThresh && fabs(r_yaw) > imuAdaptConflictThresh)
+                    target = imuWeightMin;
+                imuWeightAdaptive += imuAdaptEmaAlpha * (target - imuWeightAdaptive);
+            }
+            H(2,2) += imuWeightAdaptive * yawW; b(2) += imuWeightAdaptive * yawW * r_yaw;
         }
 
         static int yawDbg = 0;

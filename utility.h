@@ -140,6 +140,12 @@ public:
     bool dynamicOutlierRemoval;    // 动态物体在线剔除（鲁棒核 + 残差迭代 IRLS）
     bool onlineExtrinsicCalib;     // 双雷达外参在线标定（T_back_body 联合优化）
 
+    // 自适应 IMU 权重参数（adaptiveImuWeight=true 时生效）
+    float imuAdaptEmaAlpha;         // 自适应权重 EMA 平滑系数（0..1，越小响应越慢）
+    float imuAdaptObsThresh;        // lidar yaw 可观测性阈值 H(2,2)：高于此值 lidar 有独立 yaw 约束
+    float imuAdaptConflictThresh;   // IMU-lidar yaw 冲突阈值（rad）：|r_yaw| 高于此值判定 IMU 不可信
+    float imuWeightMin;             // 自适应权重的下限（IMU 不可信时压到此值）
+
     vector<double> extRotV;
     vector<double> extRPYV;
     vector<double> extTransV;
@@ -296,6 +302,10 @@ public:
         nh.param<bool>("lio_sam/degeneracyAwareFeatures", degeneracyAwareFeatures, false);
         nh.param<bool>("lio_sam/dynamicOutlierRemoval", dynamicOutlierRemoval, false);
         nh.param<bool>("lio_sam/onlineExtrinsicCalib", onlineExtrinsicCalib, false);
+        nh.param<float>("lio_sam/imuAdaptEmaAlpha", imuAdaptEmaAlpha, 0.05);
+        nh.param<float>("lio_sam/imuAdaptObsThresh", imuAdaptObsThresh, 500.0);
+        nh.param<float>("lio_sam/imuAdaptConflictThresh", imuAdaptConflictThresh, 0.05);
+        nh.param<float>("lio_sam/imuWeightMin", imuWeightMin, 0.1);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicTrans", extTransV, vector<double>());

@@ -86,6 +86,12 @@ lio_sam:
   dynamicOutlierRemoval: false      # 动态物体在线剔除（鲁棒核 + IRLS）
   onlineExtrinsicCalib: false       # 双雷达外参在线标定
 
+  # 自适应 IMU 权重参数（adaptiveImuWeight=true 时生效）
+  imuAdaptEmaAlpha: 0.05            # EMA 平滑系数
+  imuAdaptObsThresh: 500.0          # lidar yaw 可观测性阈值 H(2,2)
+  imuAdaptConflictThresh: 0.05      # IMU-lidar yaw 冲突阈值（rad）
+  imuWeightMin: 0.1                 # 自适应权重下限
+
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]
   extrinsicRot: [1, 0, 0,
