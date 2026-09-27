@@ -1,0 +1,154 @@
+lio_sam:
+
+  # Central-Wan Chai Bypass CT1 (中環灣仔繞道) 约束级融合（mergeClouds=false，默认）
+  # Topics
+  pointCloudTopic: "/points_raw"                # Unused in dual mode (kept for single fallback)
+  useDualLidar: true
+  pointCloudTopicFront: "/ouster/points"        # Front: Ouster OS1-32
+  pointCloudTopicBack: "/rslidar_points"        # Back: RoboSense M1 (MEMS)
+  imuTopic: "/imu/data"                         # IMU data (Xsens MTI-30)
+  odomTopic: "/odom"                            # Wheel odometry (not used)
+  gpsTopic: "/odometry/gpsz"                    # GPS topic (optional)
+
+  # Frames
+  lidarFrame: "base_link"
+  baselinkFrame: "base_link"
+  odometryFrame: "odom"
+  mapFrame: "map"
+
+  # GPS Settings
+  useImuHeadingInitialization: false
+  useGpsElevation: false
+  gpsCovThreshold: 2.0
+  poseCovThreshold: 25.0
+
+  # Export settings
+  savePCD: false
+  savePCDDirectory: "/Downloads/LOAM/"
+
+  # Sensor Settings (single fallback / defaults)
+  sensor: velodyne
+  N_SCAN: 32
+  Horizon_SCAN: 1800
+  downsampleRate: 1
+  lidarMinRange: 1.0
+  lidarMaxRange: 1000.0
+
+  # Per-sensor config (front/back differ in ring count & structure)
+  sensorFront: velodyne                       # Ouster OS1-32 (treated as velodyne-style ring+azimuth)
+  sensorBack: velodyne                        # RoboSense M1 (5-channel MEMS)
+  N_SCANFront: 32
+  N_SCANBack: 5
+  Horizon_SCANFront: 1800
+  Horizon_SCANBack: 1800
+
+  # Degeneracy detection & directional adaptive weighting (核心创新点2/3/4)
+  # 相对阈值 ε：λ_min < ε·λ_max 判退化（条件数 λ_max/λ_min > 1/ε）。
+  # 实测结论（双雷达+修正外参）：
+  #   HH2 结构户外场景(有RTK)：ε=1e-3 开启降权 → APE 12.4m→6.7m，有效。
+  #   WT3 退化隧道(无回环/GPS)：ε=1e-3 即使外参修复后仍更差（覆盖 576m→208m，
+  #     ICP 3.8→10.1m，摆动更剧）。原因：退化方向是"沿隧道行进方向 x"而非 yaw，
+  #     降权 x 会削弱雷达对前进位置的锚定→漂移/停滞。故 WT3 保持 ε=1e-8。
+  degeneracyEnable: false                      # 主开关：false=纯 Hf+Hb 融合(ε=1e-8 基线，无方向降权)；true=启用退化处理
+  degeneracyMode: false                        # false=H'=V·diag(d_k·λ_k)·Vᵀ (standard), true=H'=V·diag(d_k)·Vᵀ
+  degeneracyEpsilon: 1.0e-8                    # 相对阈值 ε（HH2 用 1e-3；WT3 保持 1e-8）
+  degeneracySigmaSq: 1.0e-3                    # 相对 σ² = ε·λ_max，d_k = λ_k/(λ_k+σ²)（与特征值同量纲）
+  degeneracyFloor: 0.1                         # d_k 下限：退化方向保留弱约束，避免完全失去锚点导致漂移
+  consistencyThreshold: 0.8                    # |v_weak_f·v_weak_b| threshold for same-direction suppression
+  degeneracyCondThresh: 50.0                   # DCReg: Schur 子空间条件数 κ>此值判退化（检测，论文建议 10-50）
+  degeneracyKappaTg: 10.0                      # DCReg: 特征值钳制目标条件数 λ̃=max(λ, λ_max/κ_tg)（缓解）
+
+  # IMU Settings (Xsens MTI-30)
+  imuAccNoise: 3.9939570888238808e-03
+  imuGyrNoise: 1.5636343949698187e-03
+  imuAccBiasN: 6.4356659353532566e-05
+  imuGyrBiasN: 3.5640318696367613e-05
+  imuGravity: 9.80511
+  imuRPYWeight: 0.01
+
+  # Anti-weaving yaw prior (创新点5): yawW = max(2000, yawPriorGain * H_yaw_lidar).
+  # 让先验按 H(2,2) 自适应放大，压制退化隧道里的 yaw 摆动（LIDAR yaw 信息被放大后的先验主导）。
+  # gain=1 约等于旧行为；WT3 上已证任何 yaw 约束都会停滞/发散，故 gain=0 关闭。
+  yawPriorGain: 0.0
+
+  # 后雷达旋转降权（逐雷达融合加权）：后 M1 稀疏、yaw 噪声大，缩放其旋转 DOF 权重。
+  # 1.0=关闭。实测 0.3：摆动确实下降（infl 1.59→1.27x, back 6→1%）但精度暴跌
+  # （lateral 3.5→12.8m）——后雷达旋转虽噪但对精度至关重要，故 WT3 保持 1.0。
+  backRotWeight: 1.0
+
+  # 点云拼接基线（消融）：true=把后雷达点转到机体系合并到前雷达，走单雷达 pipeline（全局 alpha），
+  # 对比"约束级融合（per-lidar alpha + Hf+Hb）"是否有实质增益。false=约束级融合（默认）。
+  mergeClouds: false
+
+  # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
+  extrinsicTrans: [0.0, 0.0, 0.0]
+  extrinsicRot: [1, 0, 0,
+                  0, 1, 0,
+                  0, 0, 1]
+  extrinsicRPY: [1, 0, 0,
+                  0, 1, 0,
+                  0, 0, 1]
+
+  # Dual per-sensor extrinsics (T_body_lidar: lidar -> body frame, fixed offline calibration)
+  # 机体系 = 前雷达(Ouster)系（与单雷达代码一致：imuConverter 用 identity 外参，IMU≈body）
+  # 前雷达为基准 identity；后雷达 T_m1_to_ouster 直接来自标定文件
+  extrinsicTransFront: [0.0, 0.0, 0.0]
+  extrinsicRotFront: [1, 0, 0,
+                       0, 1, 0,
+                       0, 0, 1]
+  extrinsicRPYFront: [1, 0, 0,
+                       0, 1, 0,
+                       0, 0, 1]
+  extrinsicTransBack: [-0.0399444, -0.00378701, -0.118777]
+  extrinsicRotBack: [0.999878, -0.00150065, -0.015523,
+                      0.00151713, 0.999998, 0.00102747,
+                      0.0155215, -0.00105084, 0.999878]
+  extrinsicRPYBack: [1, 0, 0,
+                      0, 1, 0,
+                      0, 0, 1]
+
+  # LOAM feature threshold
+  edgeThreshold: 1.0
+  surfThreshold: 0.1
+  edgeFeatureMinValidNum: 10
+  surfFeatureMinValidNum: 100
+
+  # voxel filter params
+  odometrySurfLeafSize: 0.4
+  mappingCornerLeafSize: 0.1
+  mappingSurfLeafSize: 0.2
+
+  # Robot motion constraint
+  z_tollerance: 1000
+  rotation_tollerance: 1000
+
+  # CPU Params
+  numberOfCores: 4
+  mappingProcessInterval: 0.15
+
+  # Surrounding map
+  surroundingkeyframeAddingDistThreshold: 1.0
+  surroundingkeyframeAddingAngleThreshold: 0.2
+  surroundingKeyframeDensity: 2.0
+  surroundingKeyframeSearchRadius: 50.0
+
+  # Loop closure (VGICP)
+  loopClosureEnableFlag: true
+  loopClosureFrequency: 1.0
+  surroundingKeyframeSize: 50
+  historyKeyframeSearchRadius: 15.0
+  historyKeyframeSearchTimeDiff: 30.0
+  historyKeyframeSearchNum: 25
+  historyKeyframeFitnessScore: 0.3
+
+  # VGICP parameters
+  vgicpVoxelResolution: 1.0
+  vgicpNeighborRadius: 1.5
+  vgicpMaxIterations: 30
+  vgicpConvergenceThreshold: 0.001
+  vgicpDistanceThreshold: 5.0
+
+  # Visualization
+  globalMapVisualizationSearchRadius: 1000.0
+  globalMapVisualizationPoseDensity: 10.0
+  globalMapVisualizationLeafSize: 1.0

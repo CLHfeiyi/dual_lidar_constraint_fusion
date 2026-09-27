@@ -400,6 +400,7 @@ public:
 
         ROS_INFO("\033[1;32m----> OURS SLAM Algorithm Started.\033[0m");
         ROS_INFO("  IEKF + VGICP Loop Closure (OURS)");
+        ROS_INFO("  imuWeight=%.2f (IMU velocity seed + yaw prior scale)", (double)imuWeight);
         ROS_INFO("  VGICP: voxel=%.2f radius=%.2f dist_th=%.2f",
                  vgicp.voxel_resolution, vgicp.neighbor_search_radius, vgicp.distance_threshold);
     }
@@ -813,7 +814,7 @@ public:
                 float x1 = pt.x - posXCur;
                 float y1 = pt.y - posYCur;
                 float z1 = pt.z - posZCur;
-                float rx = rotXCur, ry = rotYCur, rz = rotZCur;
+                float rx = imuWeight * rotXCur, ry = imuWeight * rotYCur, rz = imuWeight * rotZCur;
                 float rx2 = rx * rx, ry2 = ry * ry, rz2 = rz * rz;
                 float s = rx2 + ry2 + rz2;
                 if (s > 0)
@@ -1140,8 +1141,8 @@ public:
                 transformTobeMapped[0] = cloudKeyPoses6D->points[lastIdx].roll;
                 transformTobeMapped[1] = cloudKeyPoses6D->points[lastIdx].pitch;
                 transformTobeMapped[2] = cloudKeyPoses6D->points[lastIdx].yaw;
-                transformTobeMapped[3] = lastScanPosX + iekf.state.velocity.x() * dt;
-                transformTobeMapped[4] = lastScanPosY + iekf.state.velocity.y() * dt;
+                transformTobeMapped[3] = lastScanPosX + imuWeight * iekf.state.velocity.x() * dt;
+                transformTobeMapped[4] = lastScanPosY + imuWeight * iekf.state.velocity.y() * dt;
             }
             else
             {
@@ -1354,7 +1355,7 @@ public:
                 Eigen::Vector3d euler = IEKFStatePaper::quaternionToEuler(iekf.state.rotation);
                 double r_yaw = transformTobeMapped[2] - euler.x();
                 if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
-                H(2,2) += yawW; b(2) += yawW * r_yaw;
+                H(2,2) += imuWeight * yawW; b(2) += imuWeight * yawW * r_yaw;
             }
         }
 
@@ -1477,6 +1478,9 @@ public:
         double alpha = std::min(alpha_raw, 0.7);
 
         // 边缘点: 点到点残差, 雅可比 [rot | trans] = [-skew(Rp) | I]
+        // 注：点到线（F-LOAM 标准）在退化隧道里反而更差（AT1 8.00→12.13m）——隧道内边线
+        // 大多平行于行进方向，点到线允许沿线（=沿行进方向）自由滑动，丢失唯一的弱 x 锚定；
+        // 点到点（最近邻匹配）提供 3D 各向同性约束，恰好锚住退化方向 x。故保留点到点。
         for (size_t i = 0; i < laserCloudOriCornerVec[lid].size(); i++)
         {
             Eigen::Vector3f p_lidar(laserCloudOriCornerVec[lid][i].x, laserCloudOriCornerVec[lid][i].y, laserCloudOriCornerVec[lid][i].z);
@@ -1677,7 +1681,7 @@ public:
             Eigen::Vector3d euler = IEKFStatePaper::quaternionToEuler(iekf.state.rotation);
             double r_yaw = transformTobeMapped[2] - euler.x();
             if (r_yaw > M_PI) r_yaw -= 2*M_PI; else if (r_yaw < -M_PI) r_yaw += 2*M_PI;
-            H(2,2) += yawW; b(2) += yawW * r_yaw;
+            H(2,2) += imuWeight * yawW; b(2) += imuWeight * yawW * r_yaw;
         }
 
         static int yawDbg = 0;

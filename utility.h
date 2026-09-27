@@ -131,6 +131,7 @@ public:
     float imuRPYWeight;
     float yawPriorGain;          // anti-weaving: yaw prior weight = yawPriorGain * H_yaw_lidar (dominates LIDAR yaw info)
     float backRotWeight;         // down-weight back lidar rotation DOFs (M1 yaw noisy); 1.0 = off
+    float imuWeight;             // scale IMU influence: velocity seed + yaw prior + deskew rotation; 1.0 = full, 0.0 = lidar-only
     bool mergeClouds;            // baseline: merge back points into front (single-lidar pipeline) vs constraint fusion
     vector<double> extRotV;
     vector<double> extRPYV;
@@ -282,6 +283,7 @@ public:
         nh.param<float>("lio_sam/imuRPYWeight", imuRPYWeight, 0.01);
         nh.param<float>("lio_sam/yawPriorGain", yawPriorGain, 5.0);
         nh.param<float>("lio_sam/backRotWeight", backRotWeight, 1.0);
+        nh.param<float>("lio_sam/imuWeight", imuWeight, 1.0);
         nh.param<bool>("lio_sam/mergeClouds", mergeClouds, false);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
