@@ -261,3 +261,39 @@ MEMS-LIO 26.41m（膨胀 35×）、FAST-LIO2 562m（彻底发散）。紧耦合 
 复现：`bash experiments/scripts/run_at1_imuw.sh <imuWeight> <suffix>`；评估 `python3 experiments/scripts/eval_at1_imuw.py`。
 数据：`data/at1_imuw_metrics.json`。参数：`launch/run_at1_imuw.launch`（`<param lio_sam/imuWeight>` 覆盖）。
 
+
+## 14. adaptiveImuWeight（2026-09-27，负向——condT 是滞后/混淆信号，无法预测性地驱动 IMU 权重）
+
+实现 `adaptiveImuWeight` 开关（默认 false）：用**平移退化条件数 condT**（Schur 补后的平移子空间
+λ_max/λ_min）作在线判别信号，EMA（α=0.05）估计退化置信度，超过 0.5 判"退化 regime"→ imuWeight 升到
+1.0（信任 IMU），否则降到 0.1（信任激光）。机制本身运行正确（log 里 degBelief 随 condT 升降，imuW_adapt
+在 0.1/1.0 间切换）。
+
+| 场景 | 方法 | ICP 残差 (m) | 覆盖 (m) | 路径 (m) | 膨胀 (x) |
+|---|---|---|---|---|---|
+| AT1 | 静态 imuW=0.1 | 8.48 | 527.4 | 1980.8 | 3.76 |
+| AT1 | adaptive（condT 驱动） | 11.86 | 536.3 | 2571.7 | 4.80 |
+| WT3 | 静态 imuW=1.0（extfix 基线） | 3.83 | **576.4** | 917.5 | 1.59 |
+| WT3 | adaptive（condT 驱动） | 2.93 | **22.2** | 51.0 | 2.29 |
+
+**结论（负向，condT 判别器被证伪）**：
+
+1. **AT1 上 adaptive 正确识别非退化（condT 中位 ~2.9，从未 >50），落到 0.1**——但这只是"正确答案是
+   0.1"的平凡复现，且残差 11.86m 比静态 0.1 的 8.48m 差 ~3.4m（超出 run 噪声 ~0.5m，疑似分叉 run，
+   需复验；两 run 有效权重相同，代码路径仅多 EVD 计算，理论上应 bit-相同）。
+
+2. **WT3 上 adaptive 失败**：condT 在**正常跟踪时大多 <50**（中位 ~2.8，与 AT1 相同），只有跟踪
+   **已经开始停滞后**才飙到 460-630。于是 adaptive 大部分时间选 0.1，而 WT3 需要 1.0 → **停滞在 22m
+   覆盖（vs 基线 576m）**。残差 2.93m 是"冻结团块贴近 GT"的对齐假象，不是真跟踪。
+
+3. **根因（condT 是滞后/混淆信号）**：condT 反映的是**当前**可观测性，而可观测性在你降 IMU 权重、
+   开始停滞的那一刻就崩塌了——condT 只在系统**已经失败后**才升高，来不及**预防性**地把 imuWeight
+   拉高。这正是 memory 里 DCReg 实验（degeneracyEnable=true）condT 稳定 460-630 的来源：那是在
+   **已经降权、已经停滞**的轨迹上测的，是自证预言，不是预测信号。
+
+4. **判别器需要重新设计**：WT3（静态退化，需 IMU 锚 x）vs AT1（动态车辆 + 退化，需激光主导）的真正
+   分界是**动态性**（AT1 有大量动态车辆）而非 condT 可观测性。下一步应转向 `dynamicOutlierRemoval`
+   （在线动态剔除）方向，用动态占比/残差鲁棒性作信号，而非 condT。
+
+复现：`bash experiments/scripts/run_at1_adaptive.sh` / `run_wt3_adaptive.sh`（launch 设
+`adaptiveImuWeight=true, imuWeight=1.0`）。轨迹：`AT1_dual_adaptive.tum` / `WT3_dual_adaptive.tum`。
