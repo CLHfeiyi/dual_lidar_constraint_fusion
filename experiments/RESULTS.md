@@ -337,3 +337,92 @@ MEMS-LIO 26.41m（膨胀 35×）、FAST-LIO2 562m（彻底发散）。紧耦合 
 `dynamicOutlierRemoval=true`，AT1 imuWeight=0.1、WT3 imuWeight=1.0）。评估
 `python3 experiments/scripts/eval_dynamic.py`，数据 `data/dynamic_metrics.json`。
 轨迹：`AT1_dual_dynamic.tum` / `WT3_dual_dynamic.tum`。
+
+
+## 16. degeneracyAwareFeatures（2026-09-27，负向——沿 x 退化时放大 x 约束会放大歧义噪声）
+
+实现 `degeneracyAwareFeatures` 开关（默认 false）：当上一迭代 `adjustLidarHessian` 判定该雷达沿
+x（weakIdx==3，平移 idx=3 = 沿行进方向）退化时（`degX[lid]`），在 `accumulateLidarHessian` 里对
+corner 点整体权重乘 `degAwareXGain`=2.0，对 surf 点按法向 x 分量 `weight *= 1+(gain-1)·|n·x|`
+放大横截面（x-normal）面约束。目标：退化方向上用更强的特征约束补足可观测性。
+
+| 场景 | 方法 | ICP 残差 (m) | 覆盖 (m) | 路径 (m) | 膨胀 (x) |
+|---|---|---|---|---|---|
+| WT3 | extfix 基线 (imuW=1.0) | **3.83** | **576.4** | 917.5 | 1.59 |
+| WT3 | degeneracyAwareFeatures (gain=2) | 10.34 | 537.9 | 836.9 | 1.56 |
+| AT1 | imuW=0.1 基线 | 8.48 | **527.4** | 1980.8 | 3.76 |
+| AT1 | degeneracyAwareFeatures (gain=2) | 6.50 | 343.6 | 1537.8 | 4.48 |
+
+**结论（负向，特征放大被证伪）**：
+
+1. **WT3（目标场景）明显退化**：残差 3.83→10.34m（2.7× 更差），覆盖 576→538m。在退化隧道里，
+   沿 x 的可观测性本来就弱，放大 x 约束特征是"放大歧义的最近邻匹配噪声"——隧道横截面特征高度重复
+   （均匀墙壁），NN 匹配在 x 方向上的对应关系是模糊的，把它们的权重翻倍只会让噪声主导 Hessian，
+   直接破坏位姿估计。
+
+2. **AT1 残差"改善"是覆盖丢失伪影**：6.50 vs 8.48m 看似更优，但覆盖 527→344m（丢 184m 轨道）、
+   路径 1981→1538m、膨胀 3.76→4.48×（摆动更剧）。残差下降纯粹是因为轨迹变短、对齐的路径更少。
+   与 §15 dynamicOutlierRemoval 在 WT3 的 2.59m "改善"同源——**覆盖率（bus GT 沿程对齐长度）才是
+   真实指标，残差下降必须与覆盖不缩水同时成立才有意义**。
+
+3. **根因（退化方向的特征本身不可靠）**：退化定义就是"该方向的信息矩阵病态/信息量低"。对退化方向
+   做特征增强，等于对**信噪比最低**的方向加权重，只会放大噪声。可观测性的缺失无法靠"多算几个已有
+   特征"弥补，需要的是**性质不同的补充观测**（时间维度、不同几何结构、不同传感器），而非同质特征
+   的数值放大。
+
+4. **四项自适应方向的收敛结论**：`adaptiveImuWeight`（§14）、`dynamicOutlierRemoval`（§15）、
+   `degeneracyAwareFeatures`（§16）三条在线启发式全部在退化隧道里失效，失效模式高度一致——**单帧 /
+   单迭代的启发式信号在系统真正需要它的那一刻（进入退化 regime）恰好崩溃或不可用**。三者共同印证
+   memory 的核心结论：WT3-vs-AT1 的真正分界是**时序动态性**（占据栅格持久性），不是任何 per-frame
+   可观测性或残差统计。剩最后一条 `onlineExtrinsicCalib`（§17）——它不同：标定的是**静态外参偏置**
+   （T_back_body 离线标定误差），不依赖 per-frame 信号，理论上不应受此约束。
+
+复现：`bash experiments/scripts/run_wt3_degaware.sh` / `run_at1_degaware.sh`（launch 设
+`degeneracyAwareFeatures=true`，AT1 imuWeight=0.1、WT3 imuWeight=1.0）。评估
+`python3 experiments/scripts/eval_degaware.py`，数据 `data/degaware_metrics.json`。
+轨迹：`WT3_dual_degaware.tum` / `AT1_dual_degaware.tum`。
+
+
+## 17. onlineExtrinsicCalib（2026-09-27，负向——外参 GN 与位姿耦合，退化方向外参不可观测）
+
+实现 `onlineExtrinsicCalib` 开关（默认 false）：在 `accumulateLidarHessian` 里对后雷达（lid==1）每个
+corner/surf 残差额外累加外参雅可比，帧末（`scan2MapOptimizationDual` 结尾）用阻尼 Gauss-Newton
+独立求解外参增量 `dxe = -(HeeRaw + damp·I)⁻¹·beeRaw`（damp=`extCalibDamp`=1e3），左扰动更新
+`R_ext ← dR·R_ext, t_ext ← dR·t_ext + δt`，每维步长钳制 `extCalibStepMax`=0.005。外参雅可比
+（左扰动 T_ext ← Exp(δξ)·T_ext）：`d(p_world)/d(δξ) = R_cur·[-skew(p_body) | I]`。初始外参为
+标定文件给出的 T_back_body（已较准）。目标：在线微调后雷达外参偏置。
+
+| 场景 | 方法 | ICP 残差 (m) | 覆盖 (m) | 路径 (m) | 膨胀 (x) |
+|---|---|---|---|---|---|
+| WT3 | extfix 基线 (imuW=1.0) | **3.83** | **576.4** | 917.5 | 1.59 |
+| WT3 | onlineExtrinsicCalib | 6.29 | 435.6 | 496.0 | 1.14 |
+| AT1 | imuW=0.1 基线 | **8.48** | **527.4** | 1980.8 | 3.76 |
+| AT1 | onlineExtrinsicCalib | 16.97 | 329.0 | 2102.7 | 6.39 |
+
+**结论（负向，帧末外参 GN 被证伪）**：
+
+1. **WT3 退化**：残差 3.83→6.29m（1.64× 更差），覆盖 576→436m，路径 918→496m。退化隧道里后雷达
+   沿行进方向 x 的平移分量不可观测，外参 GN 的 x 平移更新与位姿的 x 漂移**完全耦合**——求解器无法区分
+   "外参错"和"位姿错"，把位姿漂移吸收进外参（日志可见 dt_x 反复触及 0.005 步长钳制上限）。外参一旦被
+   污染，后雷达点变换错误 → 融合约束错误 → 位姿更漂，形成正反馈。
+
+2. **AT1 更差**：残差 8.48→16.97m（2×），覆盖 527→329m，膨胀 3.76→6.39×（摆动剧增）。即使动态场景
+   里可观测性较好，帧末外参更新与 IEKF 位姿估计之间的**异步耦合**（外参用本帧已估计的位姿算雅可比，
+   而位姿又依赖上一帧的外参）仍会引入额外的不稳定，放大摆动。
+
+3. **失败模式与前三条不同**：`adaptiveImuWeight`/`dynamicOutlierRemoval`/`degeneracyAwareFeatures`
+   是"per-frame 信号在需要时崩溃"；`onlineExtrinsicCalib` 是"**外参与位姿的可观测性混叠**"——没有独立
+   于位姿的外参可观测性时（退化方向），联合标定必然把位姿误差泄漏进外参。要解耦需要（a）更长的观测
+   窗口/关键帧批量标定，（b）外参标定与位姿估计分离（如 g2o 边分块、外参只在充分激励方向更新），或
+   （c）已知的标定板/几何约束——都不是在线单帧 GN 能解决的。
+
+4. **四项自适应方向的最终结论**：`adaptiveImuWeight`（§14）、`dynamicOutlierRemoval`（§15）、
+   `degeneracyAwareFeatures`（§16）、`onlineExtrinsicCalib`（§17）**全部负向**。共同主题：退化隧道中，
+   任何依赖"当前单帧可观测性/残差/特征/外参"的在线自适应，都会因退化方向的信息缺失而失效或反噬。
+   本工作的真实贡献始终是**双雷达约束级融合本身**（§5/§13，WT3 1.56× 增益、单雷达必发散），而非这些
+   自适应增强。离线标定（标定文件外参）已经足够好，在线标定无必要。
+
+复现：`bash experiments/scripts/run_wt3_extcalib.sh` / `run_at1_extcalib.sh`（launch 设
+`onlineExtrinsicCalib=true`，AT1 imuWeight=0.1、WT3 imuWeight=1.0）。评估
+`python3 experiments/scripts/eval_extcalib.py`，数据 `data/extcalib_metrics.json`。
+轨迹：`WT3_dual_extcalib.tum` / `AT1_dual_extcalib.tum`。
