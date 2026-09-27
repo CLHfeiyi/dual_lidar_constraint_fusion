@@ -305,7 +305,7 @@ public:
                   lastIEKFPredictTime(-1),
                   maxDistFromOrigin_(0.0)
     {
-        imuWeightAdaptive = imuWeight;
+        imuWeightAdaptive = adaptiveImuWeight ? imuWeightMin : imuWeight;
         transDegBelief = 0.0;
         condT[0] = condT[1] = 1.0;
 
