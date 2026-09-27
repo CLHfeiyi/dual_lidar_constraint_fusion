@@ -91,6 +91,10 @@ lio_sam:
   imuAdaptDegThresh: 50.0           # 平移子空间条件数阈值（condT>此值判退化 regime → 信任 IMU）
   imuWeightMin: 0.1                 # 非退化 regime 的 IMU 权重下限（信任 lidar）
 
+  # 动态物体剔除参数（dynamicOutlierRemoval=true 时生效）
+  dynamicOutlierSigma: 0.5          # Cauchy 鲁棒核尺度 σ（米）；残差/σ 越大权重越趋近 0
+  dynamicOutlierMinWeight: 0.05     # 权重低于此值的点判为动态/外点并剔除
+
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]
   extrinsicRot: [1, 0, 0,

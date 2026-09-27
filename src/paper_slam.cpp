@@ -1296,7 +1296,8 @@ public:
                               laserCloudOriCornerTargetVec[0][i].y,
                               laserCloudOriCornerTargetVec[0][i].z);
             Eigen::Vector3d r_po = (p_world - q).cast<double>();
-            if (r_po.norm() > 2.0) continue;
+            double rn = r_po.norm();
+            if (rn > 2.0) continue;
 
             Eigen::Matrix3d skewPw;
             skewPw << 0, -p_world.z(), p_world.y(),
@@ -1306,7 +1307,14 @@ public:
             J_po.block<3,3>(0,0) = Eigen::Matrix3d::Identity();
             J_po.block<3,3>(0,3) = -skewPw;
 
-            double w = 1.0 / (1.0 + r_po.norm());
+            double w;
+            if (dynamicOutlierRemoval) {
+                double s = rn / dynamicOutlierSigma;
+                w = 1.0 / (1.0 + s * s);
+                if (w < dynamicOutlierMinWeight) continue;
+            } else {
+                w = 1.0 / (1.0 + rn);
+            }
             H += (1.0 - alpha) * w * J_po.transpose() * J_po;
             b += (1.0 - alpha) * w * J_po.transpose() * r_po;
             totalConstraints++;
@@ -1327,7 +1335,14 @@ public:
             skewRp << 0, -Rp.z(), Rp.y(), Rp.z(), 0, -Rp.x(), -Rp.y(), Rp.x(), 0;
             Eigen::Matrix<float, 1, 3> J_rot = normal.transpose() * (-skewRp);
             Eigen::Matrix<float, 1, 3> J_trans = normal.transpose();
-            float weight = 1.0f / (1.0f + fabs(r));
+            float weight;
+            if (dynamicOutlierRemoval) {
+                float s = fabs(r) / dynamicOutlierSigma;
+                weight = 1.0f / (1.0f + s * s);
+                if (weight < dynamicOutlierMinWeight) continue;
+            } else {
+                weight = 1.0f / (1.0f + fabs(r));
+            }
             Eigen::Matrix<double, 6, 1> J_row;
             J_row << J_rot(0), J_rot(1), J_rot(2), J_trans(0), J_trans(1), J_trans(2);
             H += alpha * weight * J_row * J_row.transpose();
@@ -1497,14 +1512,22 @@ public:
                               laserCloudOriCornerTargetVec[lid][i].y,
                               laserCloudOriCornerTargetVec[lid][i].z);
             Eigen::Vector3d r_po = (p_world - q).cast<double>();
-            if (r_po.norm() > 2.0) continue;
+            double rn = r_po.norm();
+            if (rn > 2.0) continue;
             Eigen::Vector3f Rp = R_cur * p_body;
             Eigen::Matrix3f skewRp;
             skewRp << 0, -Rp.z(), Rp.y(), Rp.z(), 0, -Rp.x(), -Rp.y(), Rp.x(), 0;
             Eigen::Matrix<double,3,6> J_po;
             J_po.block<3,3>(0,0) = -skewRp.cast<double>();
             J_po.block<3,3>(0,3) = Eigen::Matrix3d::Identity();
-            double w = 1.0 / (1.0 + r_po.norm());
+            double w;
+            if (dynamicOutlierRemoval) {
+                double s = rn / dynamicOutlierSigma;
+                w = 1.0 / (1.0 + s * s);                 // Cauchy 鲁棒核：大幅压制动态/外点大残差
+                if (w < dynamicOutlierMinWeight) continue;
+            } else {
+                w = 1.0 / (1.0 + rn);
+            }
             H += (1.0 - alpha) * w * J_po.transpose() * J_po;
             b += (1.0 - alpha) * w * J_po.transpose() * r_po;
         }
@@ -1525,7 +1548,14 @@ public:
             skewRp << 0, -Rp.z(), Rp.y(), Rp.z(), 0, -Rp.x(), -Rp.y(), Rp.x(), 0;
             Eigen::Matrix<float,1,3> J_rot = normal.transpose() * (-skewRp);
             Eigen::Matrix<float,1,3> J_trans = normal.transpose();
-            float weight = 1.0f / (1.0f + fabs(r));
+            float weight;
+            if (dynamicOutlierRemoval) {
+                float s = fabs(r) / dynamicOutlierSigma;
+                weight = 1.0f / (1.0f + s * s);        // Cauchy 鲁棒核
+                if (weight < dynamicOutlierMinWeight) continue;
+            } else {
+                weight = 1.0f / (1.0f + fabs(r));
+            }
             Eigen::Matrix<double,6,1> J_row;
             J_row << J_rot(0), J_rot(1), J_rot(2), J_trans(0), J_trans(1), J_trans(2);
             H += alpha * weight * J_row * J_row.transpose();

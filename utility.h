@@ -145,6 +145,10 @@ public:
     float imuAdaptDegThresh;        // 平移子空间条件数阈值 condT：高于此值判退化 regime → 信任 IMU
     float imuWeightMin;             // 非退化 regime 的 IMU 权重下限（信任 lidar）
 
+    // 动态物体剔除参数（dynamicOutlierRemoval=true 时生效）
+    float dynamicOutlierSigma;      // Cauchy 鲁棒核尺度 σ（米）；残差/σ 越大权重越趋近 0
+    float dynamicOutlierMinWeight;  // 权重低于此值的点判为动态/外点并剔除
+
     vector<double> extRotV;
     vector<double> extRPYV;
     vector<double> extTransV;
@@ -304,6 +308,8 @@ public:
         nh.param<float>("lio_sam/imuAdaptEmaAlpha", imuAdaptEmaAlpha, 0.05);
         nh.param<float>("lio_sam/imuAdaptDegThresh", imuAdaptDegThresh, 50.0);
         nh.param<float>("lio_sam/imuWeightMin", imuWeightMin, 0.1);
+        nh.param<float>("lio_sam/dynamicOutlierSigma", dynamicOutlierSigma, 0.5);
+        nh.param<float>("lio_sam/dynamicOutlierMinWeight", dynamicOutlierMinWeight, 0.05);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicTrans", extTransV, vector<double>());
