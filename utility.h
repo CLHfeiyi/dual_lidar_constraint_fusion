@@ -152,6 +152,10 @@ public:
     // 退化感知特征参数（degeneracyAwareFeatures=true 时生效）
     float degAwareXGain;            // 沿 x 退化时对 x 约束特征（各向同性 corner + 横截面 surf）的放大倍数
 
+    // 外参在线标定参数（onlineExtrinsicCalib=true 时生效）
+    float extCalibDamp;             // 外参 Hessian 对角阻尼（数值稳定 + 抑制每帧步长）
+    float extCalibStepMax;          // 每帧外参更新步长上限（rot: rad / trans: m）
+
     vector<double> extRotV;
     vector<double> extRPYV;
     vector<double> extTransV;
@@ -314,6 +318,8 @@ public:
         nh.param<float>("lio_sam/dynamicOutlierSigma", dynamicOutlierSigma, 0.5);
         nh.param<float>("lio_sam/dynamicOutlierMinWeight", dynamicOutlierMinWeight, 0.05);
         nh.param<float>("lio_sam/degAwareXGain", degAwareXGain, 2.0);
+        nh.param<float>("lio_sam/extCalibDamp", extCalibDamp, 1e3);
+        nh.param<float>("lio_sam/extCalibStepMax", extCalibStepMax, 0.005);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicTrans", extTransV, vector<double>());

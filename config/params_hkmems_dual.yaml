@@ -98,6 +98,10 @@ lio_sam:
   # 退化感知特征参数（degeneracyAwareFeatures=true 时生效）
   degAwareXGain: 2.0                # 沿 x 退化时对 x 约束特征（各向同性 corner + 横截面 surf）的放大倍数
 
+  # 外参在线标定参数（onlineExtrinsicCalib=true 时生效）
+  extCalibDamp: 1e3                 # 外参 Hessian 对角阻尼（数值稳定 + 抑制每帧步长）
+  extCalibStepMax: 0.005            # 每帧外参更新步长上限（rot: rad / trans: m）
+
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]
   extrinsicRot: [1, 0, 0,

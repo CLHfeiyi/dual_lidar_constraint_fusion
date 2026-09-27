@@ -179,6 +179,8 @@ public:
     double transDegBelief;            // 平移退化置信度 EMA（0..1，>0.5 判退化 regime → 信任 IMU）
     double condT[2];                  // 每雷达平移子空间条件数（Schur 补后）
     bool degX[2];                     // 每雷达是否沿 x 退化（weakIdx==3，上一迭代 adjustLidarHessian 计算）
+    Eigen::Matrix<double,6,6> HeeRaw; // 后雷达外参 Hessian（onlineExtrinsicCalib，帧末累积）
+    Eigen::Matrix<double,6,1> beeRaw; // 后雷达外参梯度
 
     // ---- 点云数据 ----
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn[2];
@@ -1489,6 +1491,7 @@ public:
         Eigen::Matrix<double,6,6>& H = Hraw[lid];
         Eigen::Matrix<double,6,1>& b = braw[lid];
         H.setZero(); b.setZero();
+        if (onlineExtrinsicCalib && lid == 1) { HeeRaw.setZero(); beeRaw.setZero(); }
 
         Eigen::Affine3f T_cur = trans2Affine3f(transformTobeMapped);
         Eigen::Matrix3f R_cur = T_cur.rotation();
@@ -1534,6 +1537,17 @@ public:
                 w *= degAwareXGain;                      // 沿 x 退化：放大各向同性 corner 的 x 约束
             H += (1.0 - alpha) * w * J_po.transpose() * J_po;
             b += (1.0 - alpha) * w * J_po.transpose() * r_po;
+            if (onlineExtrinsicCalib && lid == 1)
+            {
+                // 外参雅可比（左扰动 T_ext ← Exp(δξ)·T_ext）：d(p_world)/d(δξ) = R_cur·[-skew(p_body) | I]
+                Eigen::Matrix3f skewPb;
+                skewPb << 0, -p_body.z(), p_body.y(), p_body.z(), 0, -p_body.x(), -p_body.y(), p_body.x(), 0;
+                Eigen::Matrix<double,3,6> J_ext;
+                J_ext.block<3,3>(0,0) = (R_cur * (-skewPb)).cast<double>();
+                J_ext.block<3,3>(0,3) = R_cur.cast<double>();
+                HeeRaw += (1.0 - alpha) * w * J_ext.transpose() * J_ext;
+                beeRaw += (1.0 - alpha) * w * J_ext.transpose() * r_po;
+            }
         }
 
         // 平面点: 点到面残差, 雅可比 [rot | trans] = [-nᵀskew(Rp) | nᵀ]
@@ -1568,6 +1582,16 @@ public:
             J_row << J_rot(0), J_rot(1), J_rot(2), J_trans(0), J_trans(1), J_trans(2);
             H += alpha * weight * J_row * J_row.transpose();
             b += alpha * weight * J_row * r;
+            if (onlineExtrinsicCalib && lid == 1)
+            {
+                Eigen::Matrix3f skewPb;
+                skewPb << 0, -p_body.z(), p_body.y(), p_body.z(), 0, -p_body.x(), -p_body.y(), p_body.x(), 0;
+                Eigen::Matrix<double,1,6> J_ext_row;
+                J_ext_row.block<1,3>(0,0) = (normal.transpose() * (R_cur * (-skewPb))).cast<double>();
+                J_ext_row.block<1,3>(0,3) = (normal.transpose() * R_cur).cast<double>();
+                HeeRaw += alpha * weight * J_ext_row.transpose() * J_ext_row;
+                beeRaw += alpha * weight * J_ext_row.transpose() * r;
+            }
         }
     }
 
@@ -1840,6 +1864,32 @@ public:
                                  Eigen::AngleAxisd(transformTobeMapped[0], Eigen::Vector3d::UnitX()));
             iekf.state.rotation = q;
             iekf.state.position = newPos;
+        }
+
+        // 外参在线标定：帧末 Gauss-Newton 更新后雷达外参 T_back_body（阻尼 + 步长钳制，防止发散）
+        if (onlineExtrinsicCalib)
+        {
+            double stepMax = extCalibStepMax;
+            Eigen::Matrix<double,6,6> Hee = HeeRaw + (double)extCalibDamp * Eigen::Matrix<double,6,6>::Identity();
+            Eigen::Matrix<double,6,1> dxe = Hee.completeOrthogonalDecomposition().solve(-beeRaw);
+            if (dxe.array().isFinite().all())
+            {
+                for (int k = 0; k < 6; k++)
+                    dxe(k) = std::max(-stepMax, std::min(stepMax, dxe(k)));
+                Eigen::Vector3d dr = dxe.head<3>();
+                double ang = dr.norm();
+                Eigen::Matrix3d dR;
+                if (ang > 1e-12)
+                    dR = Eigen::AngleAxisd(ang, dr / ang).toRotationMatrix();
+                else
+                    dR = Eigen::Matrix3d::Identity();
+                extAffineBack.linear() = dR * extAffineBack.linear();
+                extAffineBack.translation() = dR * extAffineBack.translation() + dxe.tail<3>();
+                static int extDbg = 0;
+                if (++extDbg <= 5 || extDbg % 200 == 0)
+                    ROS_INFO("EXTCALIB dr=(%.4f,%.4f,%.4f) dt=(%.4f,%.4f,%.4f)",
+                             dr(0), dr(1), dr(2), dxe(3), dxe(4), dxe(5));
+            }
         }
     }
 
