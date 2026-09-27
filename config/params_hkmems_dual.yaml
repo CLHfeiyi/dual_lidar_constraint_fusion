@@ -79,6 +79,13 @@ lio_sam:
   # 对比"约束级融合（per-lidar alpha + Hf+Hb）"是否有实质增益。false=约束级融合（默认）。
   mergeClouds: false
 
+  # 系统级自适应开关（目标：一个配置跑通所有隧道；默认 false=关闭，保持基线可复现）
+  # 逐个实现后打开验证：IMU 自适应 → 退化感知特征 → 动态剔除 → 外参在线标定
+  adaptiveImuWeight: false          # IMU 可信度在线估计 → 自适应 imuWeight（WT3 自动~1.0，AT1 自动~0.1）
+  degeneracyAwareFeatures: false    # 沿 x 退化在线检测 → 自适应补充约束（横截面/强度/地面特征）
+  dynamicOutlierRemoval: false      # 动态物体在线剔除（鲁棒核 + 残差迭代 IRLS）
+  onlineExtrinsicCalib: false       # 双雷达外参在线标定（T_back_body 联合优化）
+
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]
   extrinsicRot: [1, 0, 0,

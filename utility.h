@@ -133,6 +133,13 @@ public:
     float backRotWeight;         // down-weight back lidar rotation DOFs (M1 yaw noisy); 1.0 = off
     float imuWeight;             // scale IMU influence: velocity seed + yaw prior + deskew rotation; 1.0 = full, 0.0 = lidar-only
     bool mergeClouds;            // baseline: merge back points into front (single-lidar pipeline) vs constraint fusion
+
+    // 系统级自适应开关（目标：一个配置跑通所有隧道；默认 false=关闭，保持基线可复现）
+    bool adaptiveImuWeight;        // 在线估计 IMU-lidar 一致性 → 自适应 imuWeight（WT3 自动~1.0，AT1 自动~0.1）
+    bool degeneracyAwareFeatures;  // 在线检测沿 x 退化 → 自适应补充约束（横截面/强度/地面特征）
+    bool dynamicOutlierRemoval;    // 动态物体在线剔除（鲁棒核 + 残差迭代 IRLS）
+    bool onlineExtrinsicCalib;     // 双雷达外参在线标定（T_back_body 联合优化）
+
     vector<double> extRotV;
     vector<double> extRPYV;
     vector<double> extTransV;
@@ -285,6 +292,10 @@ public:
         nh.param<float>("lio_sam/backRotWeight", backRotWeight, 1.0);
         nh.param<float>("lio_sam/imuWeight", imuWeight, 1.0);
         nh.param<bool>("lio_sam/mergeClouds", mergeClouds, false);
+        nh.param<bool>("lio_sam/adaptiveImuWeight", adaptiveImuWeight, false);
+        nh.param<bool>("lio_sam/degeneracyAwareFeatures", degeneracyAwareFeatures, false);
+        nh.param<bool>("lio_sam/dynamicOutlierRemoval", dynamicOutlierRemoval, false);
+        nh.param<bool>("lio_sam/onlineExtrinsicCalib", onlineExtrinsicCalib, false);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicTrans", extTransV, vector<double>());
