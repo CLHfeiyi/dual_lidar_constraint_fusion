@@ -149,6 +149,9 @@ public:
     float dynamicOutlierSigma;      // Cauchy 鲁棒核尺度 σ（米）；残差/σ 越大权重越趋近 0
     float dynamicOutlierMinWeight;  // 权重低于此值的点判为动态/外点并剔除
 
+    // 退化感知特征参数（degeneracyAwareFeatures=true 时生效）
+    float degAwareXGain;            // 沿 x 退化时对 x 约束特征（各向同性 corner + 横截面 surf）的放大倍数
+
     vector<double> extRotV;
     vector<double> extRPYV;
     vector<double> extTransV;
@@ -310,6 +313,7 @@ public:
         nh.param<float>("lio_sam/imuWeightMin", imuWeightMin, 0.1);
         nh.param<float>("lio_sam/dynamicOutlierSigma", dynamicOutlierSigma, 0.5);
         nh.param<float>("lio_sam/dynamicOutlierMinWeight", dynamicOutlierMinWeight, 0.05);
+        nh.param<float>("lio_sam/degAwareXGain", degAwareXGain, 2.0);
         nh.param<vector<double>>("lio_sam/extrinsicRot", extRotV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicRPY", extRPYV, vector<double>());
         nh.param<vector<double>>("lio_sam/extrinsicTrans", extTransV, vector<double>());

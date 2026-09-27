@@ -95,6 +95,9 @@ lio_sam:
   dynamicOutlierSigma: 0.5          # Cauchy 鲁棒核尺度 σ（米）；残差/σ 越大权重越趋近 0
   dynamicOutlierMinWeight: 0.05     # 权重低于此值的点判为动态/外点并剔除
 
+  # 退化感知特征参数（degeneracyAwareFeatures=true 时生效）
+  degAwareXGain: 2.0                # 沿 x 退化时对 x 约束特征（各向同性 corner + 横截面 surf）的放大倍数
+
   # Extrinsics: T_lb (lidar -> imu), identity (IMU frame matches LiDAR)
   extrinsicTrans: [0.0, 0.0, 0.0]
   extrinsicRot: [1, 0, 0,

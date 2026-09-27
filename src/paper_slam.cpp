@@ -178,6 +178,7 @@ public:
     double imuWeightAdaptive;         // 在线自适应 IMU 权重（regime 切换，初始=imuWeight）
     double transDegBelief;            // 平移退化置信度 EMA（0..1，>0.5 判退化 regime → 信任 IMU）
     double condT[2];                  // 每雷达平移子空间条件数（Schur 补后）
+    bool degX[2];                     // 每雷达是否沿 x 退化（weakIdx==3，上一迭代 adjustLidarHessian 计算）
 
     // ---- 点云数据 ----
     pcl::PointCloud<PointXYZIRT>::Ptr laserCloudIn[2];
@@ -308,6 +309,7 @@ public:
         imuWeightAdaptive = adaptiveImuWeight ? imuWeightMin : imuWeight;
         transDegBelief = 0.0;
         condT[0] = condT[1] = 1.0;
+        degX[0] = degX[1] = false;
 
         // 初始化ISAM2 (performance-tuned: reduce relinearization frequency)
         ISAM2Params parameters;
@@ -1528,6 +1530,8 @@ public:
             } else {
                 w = 1.0 / (1.0 + rn);
             }
+            if (degeneracyAwareFeatures && degX[lid])
+                w *= degAwareXGain;                      // 沿 x 退化：放大各向同性 corner 的 x 约束
             H += (1.0 - alpha) * w * J_po.transpose() * J_po;
             b += (1.0 - alpha) * w * J_po.transpose() * r_po;
         }
@@ -1556,6 +1560,10 @@ public:
             } else {
                 weight = 1.0f / (1.0f + fabs(r));
             }
+            if (degeneracyAwareFeatures && degX[lid]) {
+                float nx = normal.dot(R_cur.col(0));     // 表面法向在机体系 x（沿行进方向）分量
+                weight *= 1.0f + (degAwareXGain - 1.0f) * fabs(nx);  // 横截面（x-normal）面放大
+            }
             Eigen::Matrix<double,6,1> J_row;
             J_row << J_rot(0), J_rot(1), J_rot(2), J_trans(0), J_trans(1), J_trans(2);
             H += alpha * weight * J_row * J_row.transpose();
@@ -1573,7 +1581,7 @@ public:
 
         // 退化处理开关：关闭时纯 Hf+Hb 融合（等价 ε=1e-8 基线），不做方向降权。
         // adaptiveImuWeight 需要 condT/weakIdx 作退化信号，故该开关下也走 EVD 计算（但不投影）。
-        if (!degeneracyEnable && !degeneracyLogOnly && !adaptiveImuWeight)
+        if (!degeneracyEnable && !degeneracyLogOnly && !adaptiveImuWeight && !degeneracyAwareFeatures)
         {
             isDeg[lid] = false;
             dW[lid].setOnes();
@@ -1642,6 +1650,7 @@ public:
         dW[lid].minCoeff(&mi);
         weakIdx[lid] = (int)mi;
         vWeak[lid] = eigVecs[lid].col(mi);
+        degX[lid] = (weakIdx[lid] == 3);   // 沿 x（平移 idx=3）退化
 
         if (degeneracyEnable && !degeneracyLogOnly)
             projMat[lid] = eigVecs[lid] * dW[lid].asDiagonal() * eigVecs[lid].transpose();
