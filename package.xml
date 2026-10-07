@@ -2,13 +2,13 @@
 <package>
   <name>lio_sam</name>
   <version>1.0.0</version>
-  <description>Lidar Odometry</description>
+  <description>Dual-LiDAR constraint-level fusion LIO (derived from LIO-SAM)</description>
 
-  <maintainer email="shant@mit.edu">Tixiao Shan</maintainer>
+  <maintainer email="clhanke@163.com">Linghua Cui</maintainer>
 
-  <license>TODO</license>
+  <license>BSD-3-Clause</license>
 
-  <author>Tixiao Shan</author>
+  <author email="clhanke@163.com">Linghua Cui</author>
 
   <buildtool_depend>catkin</buildtool_depend>
 
