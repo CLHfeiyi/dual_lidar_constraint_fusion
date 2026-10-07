@@ -20,7 +20,7 @@ lio_sam:
 
   # Export settings
   savePCD: true
-  savePCDDirectory: "/home/clh/catkin_ws/bags/paper_comparison/"
+  savePCDDirectory: "./maps/"
 
   # Sensor Settings
   sensor: velodyne

@@ -28,7 +28,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("bag_path")
     parser.add_argument("--mode", choices=["dual", "single"], default="dual")
-    parser.add_argument("--output-dir", default="/home/clh/桌面/data/HKMEMS-results")
+    parser.add_argument("--output-dir", default="./results")
     parser.add_argument("--rate", type=float, default=1.0)
     parser.add_argument("--no-kill", action="store_true",
                         help="Don't kill existing ROS processes")
@@ -44,7 +44,6 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     env = os.environ.copy()
-    ws = "/home/clh/catkin_ws"
 
     # Kill old processes
     if not args.no_kill:
